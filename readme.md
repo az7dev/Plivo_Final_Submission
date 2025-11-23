@@ -4,6 +4,7 @@
 ## CE22B038 - ALSALA AHMED 
 ## IIT Madras
 ## Quick Start Guide
+## Quick Start Guide
 
 This guide will walk you through the complete workflow from setup to evaluation.
 
@@ -11,7 +12,7 @@ This guide will walk you through the complete workflow from setup to evaluation.
 
 ```bash
 # Clone the repository
-git clone https://github.com/az7dev/Plivo_Final_Submission.git
+git clone <repository-url>
 cd Plivo_Assignment
 
 # Create a virtual environment (recommended)
@@ -246,7 +247,7 @@ python src/train.py --device cpu ...
 ## Project Structure
 
 ```
-@@ -143,28 +383,273 @@ python src/measure_latency.py \
+	@@ -143,28 +383,273 @@ python src/measure_latency.py \
 
 ## Implementation Details
 
@@ -270,7 +271,7 @@ def evaluate(model, dev_dl, device):
     model.eval()
     total_loss = 0.0
     num_batches = 0
-    
+
     with torch.no_grad():
         for batch in dev_dl:
             # ... evaluation code ...
@@ -288,7 +289,7 @@ patience_counter = 0
 for epoch in range(args.epochs):
     # ... training ...
     dev_loss = evaluate(model, dev_dl, args.device)
-    
+
     if dev_loss < best_dev_loss:
         best_dev_loss = dev_loss
         patience_counter = 0
@@ -410,13 +411,13 @@ def create_model(model_name: str, dropout: float = 0.1):
     config.num_labels = len(LABEL2ID)
     config.id2label = ID2LABEL
     config.label2id = LABEL2ID
-    
+
     # Set dropout for better regularization
     if hasattr(config, 'classifier_dropout'):
         config.classifier_dropout = dropout
     elif hasattr(config, 'hidden_dropout_prob'):
         config.hidden_dropout_prob = dropout
-    
+
     model = AutoModelForTokenClassification.from_pretrained(
         model_name,
         config=config,
@@ -440,7 +441,7 @@ Basic inference without optimizations.
 if args.device == "cpu":
     # Single thread for consistent latency measurement
     torch.set_num_threads(1)
-    
+
     # Enable MKL-DNN optimizations for faster CPU inference
     if hasattr(torch.backends, 'mkldnn'):
         torch.backends.mkldnn.enabled = True
@@ -517,3 +518,5 @@ These improvements collectively contribute to:
 - **Lower Latency:** Optimizations reduce inference time by 10-30%
 - **More Reliable:** Better error handling and edge case management
 - **Production Ready:** Accurate latency measurements and optimizations for deployment
+
+## Results
