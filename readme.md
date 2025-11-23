@@ -12,8 +12,8 @@ This guide will walk you through the complete workflow from setup to evaluation.
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd Plivo_Assignment
+git clone https://github.com/az7dev/Plivo_Final_Submission.git
+cd Plivo_Final_Submission
 
 # Create a virtual environment (recommended)
 python -m venv venv
