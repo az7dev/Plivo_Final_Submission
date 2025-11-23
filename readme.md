@@ -1,6 +1,4 @@
 
-- `tqdm` - Progress bars
-- `seqeval` - Sequence labeling evaluation
 ## Plivo Placement Assignment 
 ## CE22B038 - ALSALA AHMED 
 ## IIT Madras
