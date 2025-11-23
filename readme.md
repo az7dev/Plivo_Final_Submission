@@ -4,7 +4,6 @@
 ## CE22B038 - ALSALA AHMED 
 ## IIT Madras
 ## Quick Start Guide
-## Quick Start Guide
 
 This guide will walk you through the complete workflow from setup to evaluation.
 
