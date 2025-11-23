@@ -15,7 +15,7 @@ def main():
     ap.add_argument("--input", default="data/dev.jsonl")
     ap.add_argument("--max_length", type=int, default=256)
     ap.add_argument("--runs", type=int, default=50)
-    ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--device", default="cpu")
     args = ap.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir if args.model_name is None else args.model_name)

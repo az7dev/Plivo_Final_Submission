@@ -523,19 +523,19 @@ These improvements collectively contribute to:
 ## Results
 
 Per-entity metrics:
-CITY            P=0.964 R=1.000 F1=0.981
-CREDIT_CARD     P=0.824 R=1.000 F1=0.903
-DATE            P=0.884 R=0.950 F1=0.916
-EMAIL           P=0.795 R=0.912 F1=0.849
-LOCATION        P=0.792 R=1.000 F1=0.884
-PERSON_NAME     P=0.750 R=0.978 F1=0.849
-PHONE           P=0.800 R=1.000 F1=0.889
+CITY            P=0.946 R=1.000 F1=0.972
+CREDIT_CARD     P=0.500 R=0.786 F1=0.611
+DATE            P=0.848 R=0.975 F1=0.907
+EMAIL           P=0.810 R=1.000 F1=0.895
+LOCATION        P=0.760 R=1.000 F1=0.864
+PERSON_NAME     P=0.742 R=1.000 F1=0.852
+PHONE           P=0.659 R=0.964 F1=0.783
 
-Macro-F1: 0.896
+Macro-F1: 0.840
 
-PII-only metrics: P=0.804 R=0.963 F1=0.876
-Non-PII metrics: P=0.911 R=1.000 F1=0.954
+PII-only metrics: P=0.737 R=0.969 F1=0.837
+Non-PII metrics: P=0.889 R=1.000 F1=0.941
 
 Latency over 50 runs (batch_size=1):
-  p50: 4.74 ms
-  p95: 6.52 ms
+  p50: 4.68 ms
+  p95: 6.35 ms

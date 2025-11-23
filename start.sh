@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 echo "=== Training Model ==="
 python src/train.py \
-    --model_name distilbert-base-uncased \
+    --model_name google/bert_uncased_L-4_H-256_A-4 \
     --train data/train.jsonl \
     --dev data/dev.jsonl \
     --out_dir out
