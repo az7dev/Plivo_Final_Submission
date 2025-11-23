@@ -71,11 +71,13 @@ class PIIDataset(Dataset):
                                     # Check if we're continuing from previous token
                                     if i > 0 and len(bio_tags) > 0:
                                         prev_tag = bio_tags[-1]
-                                        if prev_tag.startswith("I-") and prev_tag.split("-", 1)[1] == entity_type:
+                                        prev_entity_type = prev_tag.split("-", 1)[1] if "-" in prev_tag else None
+                                        
+                                        if prev_tag.startswith("I-") and prev_entity_type == entity_type:
                                             # Continue the entity
                                             tag = prev_tag
-                                        elif prev_tag.startswith("B-") and prev_tag.split("-", 1)[1] == entity_type:
-                                            # Continue the entity
+                                        elif prev_tag.startswith("B-") and prev_entity_type == entity_type:
+                                            # Continue the entity (convert B- to I-)
                                             tag = f"I-{entity_type}"
                                         elif prev_tag == "O":
                                             # Start new entity after O

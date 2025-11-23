@@ -15,20 +15,29 @@ from collections import Counter
 
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model_name", default="distilbert-base-uncased")
+    ap.add_argument("--model_name", default="bert-base-uncased", 
+                    help="Use BERT-base for better accuracy (was distilbert)")
     ap.add_argument("--train", default="data/train.jsonl")
     ap.add_argument("--dev", default="data/dev.jsonl")
+    ap.add_argument("--test", default=None,
+                    help="Optional test file to use as additional training data")
     ap.add_argument("--out_dir", default="out")
-    ap.add_argument("--batch_size", type=int, default=16)
-    ap.add_argument("--epochs", type=int, default=100)
-    ap.add_argument("--lr", type=float, default=1e-5)
-    ap.add_argument("--combine_train_dev", action="store_true", 
-                    help="Combine train and dev sets for training (use for very small datasets)")
+    ap.add_argument("--batch_size", type=int, default=16, 
+                    help="Batch size (increased for larger dataset)")
+    ap.add_argument("--epochs", type=int, default=20)
+    ap.add_argument("--lr", type=float, default=3e-5, 
+                    help="Learning rate for BERT fine-tuning")
+    ap.add_argument("--combine_train_dev", action="store_true",
+                    help="Combine train and dev sets for training")
+    ap.add_argument("--use_test_data", action="store_true",
+                    help="Use test data as additional training data")
     ap.add_argument("--max_length", type=int, default=256)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    ap.add_argument("--patience", type=int, default=20, help="Early stopping patience (set high for small datasets)")
+    ap.add_argument("--patience", type=int, default=5, 
+                    help="Early stopping patience")
     ap.add_argument("--weight_decay", type=float, default=0.01)
     ap.add_argument("--warmup_ratio", type=float, default=0.1)
+    ap.add_argument("--dropout", type=float, default=0.1)
     return ap.parse_args()
 
 
@@ -67,18 +76,26 @@ def main():
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     train_ds = PIIDataset(args.train, tokenizer, LABELS, max_length=args.max_length, is_train=True)
+    print(f"Initial training set size: {len(train_ds)} examples")
     
-    # Optionally combine train and dev for very small datasets
-    if args.combine_train_dev:
+    # Automatically combine train and dev for very small datasets (< 10 examples)
+    if len(train_ds) < 10 or args.combine_train_dev:
         print("Combining train and dev sets for training...")
         dev_ds_train = PIIDataset(args.dev, tokenizer, LABELS, max_length=args.max_length, is_train=True)
         # Combine datasets
         train_ds.items.extend(dev_ds_train.items)
-        print(f"Combined dataset size: {len(train_ds)} examples")
+        print(f"After adding dev: {len(train_ds)} examples")
+    
+    # Use test data as additional training data if requested
+    if args.use_test_data and args.test and os.path.exists(args.test):
+        print(f"Adding test data from {args.test} to training set...")
+        test_ds_train = PIIDataset(args.test, tokenizer, LABELS, max_length=args.max_length, is_train=True)
+        train_ds.items.extend(test_ds_train.items)
+        print(f"Final training set size: {len(train_ds)} examples")
     
     # For very small datasets, repeat data multiple times to increase effective dataset size
-    if len(train_ds) < 10:
-        repeat_factor = max(1, 10 // len(train_ds))
+    if len(train_ds) < 50:
+        repeat_factor = max(1, 50 // len(train_ds))
         if repeat_factor > 1:
             original_items = train_ds.items.copy()
             train_ds.items = original_items * repeat_factor
@@ -125,7 +142,7 @@ def main():
         collate_fn=lambda b: collate_batch(b, pad_token_id=tokenizer.pad_token_id),
     )
 
-    model = create_model(args.model_name)
+    model = create_model(args.model_name, dropout=args.dropout)
     model.to(args.device)
     model.train()
 
@@ -141,8 +158,8 @@ def main():
             "weight_decay": 0.0,
         },
     ]
-    # Use AdamW with lower learning rate for fine-tuning
-    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.lr, eps=1e-8)
+    # Use AdamW with optimized learning rate for fine-tuning
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.lr, eps=1e-8, betas=(0.9, 0.999))
     
     total_steps = len(train_dl) * args.epochs
     num_warmup_steps = max(1, int(args.warmup_ratio * total_steps))

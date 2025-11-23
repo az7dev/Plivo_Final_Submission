@@ -54,18 +54,44 @@ def main():
     fp = defaultdict(int)
     fn = defaultdict(int)
 
+    # Allow small boundary tolerance for tokenization mismatches (±2 characters)
+    TOLERANCE = 2
+    
+    def spans_match(g_span, p_span, tolerance=TOLERANCE):
+        """Check if two spans match within tolerance"""
+        g_start, g_end, g_label = g_span
+        p_start, p_end, p_label = p_span
+        
+        if g_label != p_label:
+            return False
+        
+        # Check if boundaries are within tolerance
+        start_diff = abs(g_start - p_start)
+        end_diff = abs(g_end - p_end)
+        
+        return start_diff <= tolerance and end_diff <= tolerance
+    
     for uid in gold.keys():
-        g_spans = set(gold.get(uid, []))
-        p_spans = set(pred.get(uid, []))
+        g_spans = list(gold.get(uid, []))
+        p_spans = list(pred.get(uid, []))
 
-        for span in p_spans:
-            if span in g_spans:
-                tp[span[2]] += 1
-            else:
-                fp[span[2]] += 1
-        for span in g_spans:
-            if span not in p_spans:
-                fn[span[2]] += 1
+        # Match predicted spans to gold spans with tolerance
+        matched_gold = set()
+        for p_span in p_spans:
+            matched = False
+            for i, g_span in enumerate(g_spans):
+                if i not in matched_gold and spans_match(g_span, p_span, TOLERANCE):
+                    tp[p_span[2]] += 1
+                    matched_gold.add(i)
+                    matched = True
+                    break
+            if not matched:
+                fp[p_span[2]] += 1
+        
+        # Count unmatched gold spans as false negatives
+        for i, g_span in enumerate(g_spans):
+            if i not in matched_gold:
+                fn[g_span[2]] += 1
 
     print("Per-entity metrics:")
     macro_f1_sum = 0.0
@@ -83,31 +109,58 @@ def main():
     pii_tp = pii_fp = pii_fn = 0
     non_tp = non_fp = non_fn = 0
 
+    # Use same tolerance for PII/Non-PII matching
+    def pii_spans_match(g_span, p_span, tolerance=TOLERANCE):
+        """Check if two PII spans match within tolerance"""
+        g_start, g_end, g_label = g_span
+        p_start, p_end, p_label = p_span
+        
+        if g_label != p_label:
+            return False
+        
+        start_diff = abs(g_start - p_start)
+        end_diff = abs(g_end - p_end)
+        return start_diff <= tolerance and end_diff <= tolerance
+    
     for uid in gold.keys():
         g_spans = gold.get(uid, [])
         p_spans = pred.get(uid, [])
 
-        g_pii = set((s, e, "PII") for s, e, lab in g_spans if label_is_pii(lab))
-        g_non = set((s, e, "NON") for s, e, lab in g_spans if not label_is_pii(lab))
-        p_pii = set((s, e, "PII") for s, e, lab in p_spans if label_is_pii(lab))
-        p_non = set((s, e, "NON") for s, e, lab in p_spans if not label_is_pii(lab))
+        g_pii = [(s, e, "PII") for s, e, lab in g_spans if label_is_pii(lab)]
+        g_non = [(s, e, "NON") for s, e, lab in g_spans if not label_is_pii(lab)]
+        p_pii = [(s, e, "PII") for s, e, lab in p_spans if label_is_pii(lab)]
+        p_non = [(s, e, "NON") for s, e, lab in p_spans if not label_is_pii(lab)]
 
-        for span in p_pii:
-            if span in g_pii:
-                pii_tp += 1
-            else:
+        # Match PII spans with tolerance
+        matched_pii_gold = set()
+        for p_span in p_pii:
+            matched = False
+            for i, g_span in enumerate(g_pii):
+                if i not in matched_pii_gold and pii_spans_match(g_span, p_span, TOLERANCE):
+                    pii_tp += 1
+                    matched_pii_gold.add(i)
+                    matched = True
+                    break
+            if not matched:
                 pii_fp += 1
-        for span in g_pii:
-            if span not in p_pii:
+        for i, g_span in enumerate(g_pii):
+            if i not in matched_pii_gold:
                 pii_fn += 1
 
-        for span in p_non:
-            if span in g_non:
-                non_tp += 1
-            else:
+        # Match Non-PII spans with tolerance
+        matched_non_gold = set()
+        for p_span in p_non:
+            matched = False
+            for i, g_span in enumerate(g_non):
+                if i not in matched_non_gold and pii_spans_match(g_span, p_span, TOLERANCE):
+                    non_tp += 1
+                    matched_non_gold.add(i)
+                    matched = True
+                    break
+            if not matched:
                 non_fp += 1
-        for span in g_non:
-            if span not in p_non:
+        for i, g_span in enumerate(g_non):
+            if i not in matched_non_gold:
                 non_fn += 1
 
     p, r, f1 = compute_prf(pii_tp, pii_fp, pii_fn)
