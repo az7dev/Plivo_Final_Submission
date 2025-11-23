@@ -7,41 +7,76 @@ import os
 import torch.backends.mkldnn
 
 
-def bio_to_spans(text, offsets, label_ids):
+def bio_to_spans(text, offsets, label_ids, confidence_scores=None, min_confidence=0.0):
+    """
+    Convert BIO tag predictions to entity spans.
+    
+    Args:
+        text: Original text
+        offsets: Token offset mappings
+        label_ids: Predicted label IDs
+        confidence_scores: Optional confidence scores for each token
+        min_confidence: Minimum confidence threshold (0.0 to 1.0)
+    
+    Returns:
+        List of (start, end, label) tuples
+    """
     spans = []
     current_label = None
     current_start = None
     current_end = None
+    current_confidence = None
 
-    for (start, end), lid in zip(offsets, label_ids):
+    for idx, ((start, end), lid) in enumerate(zip(offsets, label_ids)):
         if start == 0 and end == 0:
             continue
+        
         label = ID2LABEL.get(int(lid), "O")
+        confidence = confidence_scores[idx] if confidence_scores is not None else 1.0
+        
         if label == "O":
             if current_label is not None:
-                spans.append((current_start, current_end, current_label))
+                # Check confidence threshold before adding span
+                if current_confidence is None or current_confidence >= min_confidence:
+                    spans.append((current_start, current_end, current_label))
                 current_label = None
+                current_confidence = None
             continue
 
         prefix, ent_type = label.split("-", 1)
         if prefix == "B":
+            # Save previous entity if exists
             if current_label is not None:
-                spans.append((current_start, current_end, current_label))
+                if current_confidence is None or current_confidence >= min_confidence:
+                    spans.append((current_start, current_end, current_label))
+            # Start new entity
             current_label = ent_type
             current_start = start
             current_end = end
+            current_confidence = confidence
         elif prefix == "I":
             if current_label == ent_type:
+                # Continue current entity
                 current_end = end
+                # Update confidence (use minimum or average)
+                if current_confidence is not None:
+                    current_confidence = min(current_confidence, confidence)
+                else:
+                    current_confidence = confidence
             else:
+                # Mismatch: save previous and start new
                 if current_label is not None:
-                    spans.append((current_start, current_end, current_label))
+                    if current_confidence is None or current_confidence >= min_confidence:
+                        spans.append((current_start, current_end, current_label))
                 current_label = ent_type
                 current_start = start
                 current_end = end
+                current_confidence = confidence
 
+    # Save final entity
     if current_label is not None:
-        spans.append((current_start, current_end, current_label))
+        if current_confidence is None or current_confidence >= min_confidence:
+            spans.append((current_start, current_end, current_label))
 
     return spans
 
@@ -55,6 +90,8 @@ def main():
     ap.add_argument("--max_length", type=int, default=256)
     ap.add_argument(
         "--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--min_confidence", type=float, default=0.0, 
+                    help="Minimum confidence threshold for predictions (0.0 to 1.0)")
     args = ap.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -98,19 +135,58 @@ def main():
             with torch.no_grad():
                 out = model(input_ids=input_ids, attention_mask=attention_mask)
                 logits = out.logits[0]
+                
+                # Get predictions and confidence scores
+                probs = torch.softmax(logits, dim=-1)
                 pred_ids = logits.argmax(dim=-1).cpu().tolist()
+                # Get confidence as max probability
+                confidences = probs.max(dim=-1)[0].cpu().tolist()
 
-            spans = bio_to_spans(text, offsets, pred_ids)
+            spans = bio_to_spans(text, offsets, pred_ids, confidences, args.min_confidence)
+            
+            # Post-process: merge adjacent entities of the same type
+            merged_spans = []
+            if spans:
+                current_start, current_end, current_label = spans[0]
+                for s, e, lab in spans[1:]:
+                    if lab == current_label and s <= current_end + 1:  # Adjacent or overlapping
+                        # Merge: extend the end
+                        current_end = max(current_end, e)
+                    else:
+                        # Save current and start new
+                        merged_spans.append((current_start, current_end, current_label))
+                        current_start, current_end, current_label = s, e, lab
+                # Add the last span
+                merged_spans.append((current_start, current_end, current_label))
+            else:
+                merged_spans = spans
+            
+            # Refine spans: trim whitespace and align to word boundaries
             ents = []
-            for s, e, lab in spans:
-                ents.append(
-                    {
-                        "start": int(s),
-                        "end": int(e),
-                        "label": lab,
-                        "pii": bool(label_is_pii(lab)),
-                    }
-                )
+            for s, e, lab in merged_spans:
+                # Filter out very short entities (likely false positives)
+                if e - s >= 2:  # At least 2 characters
+                    # Trim leading/trailing whitespace
+                    span_text = text[s:e]
+                    # Find actual start/end without leading/trailing spaces
+                    actual_start = s
+                    actual_end = e
+                    # Trim leading spaces
+                    while actual_start < actual_end and text[actual_start].isspace():
+                        actual_start += 1
+                    # Trim trailing spaces
+                    while actual_end > actual_start and text[actual_end - 1].isspace():
+                        actual_end -= 1
+                    
+                    if actual_end > actual_start:  # Only add if there's content
+                        ents.append(
+                            {
+                                "start": int(actual_start),
+                                "end": int(actual_end),
+                                "label": lab,
+                                "pii": bool(label_is_pii(lab)),
+                            }
+                        )
             results[uid] = ents
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)

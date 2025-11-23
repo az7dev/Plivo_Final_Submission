@@ -1,5 +1,6 @@
 import json
 from typing import List, Dict, Any
+from collections import Counter
 from torch.utils.data import Dataset
 
 
@@ -47,21 +48,48 @@ class PIIDataset(Dataset):
                         # Special tokens (CLS, SEP, PAD) get "O"
                         bio_tags.append("O")
                     else:
-                        # For subword tokens, use the label of the first character
-                        # Handle subword tokenization: if token starts mid-entity, use I- tag
-                        if start < len(char_tags):
-                            tag = char_tags[start]
-                            # If this is a B- tag but we're continuing from previous token with same entity type,
-                            # convert to I- tag (handles subword tokenization)
-                            if tag.startswith("B-") and i > 0:
-                                prev_tag = bio_tags[-1]
-                                if prev_tag.startswith("I-") and prev_tag[2:] == tag[2:]:
-                                    # This is a continuation of the same entity (subword tokenization)
-                                    bio_tags.append(prev_tag)
-                                else:
-                                    bio_tags.append(tag)
+                        # Better label assignment: check all characters in the token
+                        if start < len(char_tags) and end <= len(char_tags):
+                            # Get all tags for characters in this token
+                            token_char_tags = char_tags[start:end]
+                            
+                            # Count entity tags (non-O tags)
+                            entity_tags = [t for t in token_char_tags if t != "O"]
+                            
+                            if not entity_tags:
+                                # All characters are O
+                                tag = "O"
                             else:
-                                bio_tags.append(tag)
+                                # Use majority vote - prioritize entity tags over O
+                                tag_counts = Counter(entity_tags)
+                                most_common_tag = tag_counts.most_common(1)[0][0]
+                                
+                                # Determine if this should be B- or I-
+                                if most_common_tag.startswith("B-") or most_common_tag.startswith("I-"):
+                                    entity_type = most_common_tag.split("-", 1)[1]
+                                    
+                                    # Check if we're continuing from previous token
+                                    if i > 0 and len(bio_tags) > 0:
+                                        prev_tag = bio_tags[-1]
+                                        if prev_tag.startswith("I-") and prev_tag.split("-", 1)[1] == entity_type:
+                                            # Continue the entity
+                                            tag = prev_tag
+                                        elif prev_tag.startswith("B-") and prev_tag.split("-", 1)[1] == entity_type:
+                                            # Continue the entity
+                                            tag = f"I-{entity_type}"
+                                        elif prev_tag == "O":
+                                            # Start new entity after O
+                                            tag = f"B-{entity_type}"
+                                        else:
+                                            # Different entity type, start new
+                                            tag = f"B-{entity_type}"
+                                    else:
+                                        # First token, start new entity
+                                        tag = f"B-{entity_type}"
+                                else:
+                                    tag = most_common_tag
+                            
+                            bio_tags.append(tag)
                         else:
                             # Token is beyond text length (shouldn't happen, but handle gracefully)
                             bio_tags.append("O")
