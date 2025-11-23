@@ -7,6 +7,8 @@
 
 This guide will walk you through the complete workflow from setup to evaluation.
 
+
+
 ### Step 1: Clone and Setup
 
 ```bash
@@ -519,3 +521,16 @@ These improvements collectively contribute to:
 - **Production Ready:** Accurate latency measurements and optimizations for deployment
 
 ## Results
+Per-entity metrics:
+CITY            P=0.964 R=1.000 F1=0.981
+CREDIT_CARD     P=0.824 R=1.000 F1=0.903
+DATE            P=0.800 R=0.900 F1=0.847
+EMAIL           P=0.791 R=1.000 F1=0.883
+LOCATION        P=0.750 R=0.947 F1=0.837
+PERSON_NAME     P=0.738 R=0.978 F1=0.841
+PHONE           P=0.737 R=1.000 F1=0.848
+
+Macro-F1: 0.877
+
+PII-only metrics: P=0.770 R=0.969 F1=0.858
+Non-PII metrics: P=0.899 R=0.986 F1=0.940
